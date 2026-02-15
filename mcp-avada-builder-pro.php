@@ -49,6 +49,12 @@ function mcp_avada_pro_register_abilities(): void {
                     'success' => array('type' => 'boolean'),
                 ),
             ),
+            'meta'                => array(
+                'mcp' => array(
+                    'public' => true,
+                    'type'   => 'tool',
+                ),
+            ),
         )
     );
 
@@ -70,6 +76,12 @@ function mcp_avada_pro_register_abilities(): void {
                 ),
                 'required'    => array('page_id'),
             ),
+            'meta'                => array(
+                'mcp' => array(
+                    'public' => true,
+                    'type'   => 'tool',
+                ),
+            ),
         )
     );
 
@@ -90,6 +102,12 @@ function mcp_avada_pro_register_abilities(): void {
                     'element_type' => array('type' => 'string'),
                 ),
                 'required'    => array('page_id'),
+            ),
+            'meta'                => array(
+                'mcp' => array(
+                    'public' => true,
+                    'type'   => 'tool',
+                ),
             ),
         )
     );
@@ -113,6 +131,12 @@ function mcp_avada_pro_register_abilities(): void {
                     'column_type' => array('type' => 'string', 'default' => '1_1'),
                 ),
                 'required'    => array('page_id'),
+            ),
+            'meta'                => array(
+                'mcp' => array(
+                    'public' => true,
+                    'type'   => 'tool',
+                ),
             ),
         )
     );
@@ -140,6 +164,12 @@ function mcp_avada_pro_register_abilities(): void {
                 ),
                 'required'    => array('page_id', 'element_type'),
             ),
+            'meta'                => array(
+                'mcp' => array(
+                    'public' => true,
+                    'type'   => 'tool',
+                ),
+            ),
         )
     );
 
@@ -163,6 +193,12 @@ function mcp_avada_pro_register_abilities(): void {
                 ),
                 'required'    => array('page_id', 'element_path'),
             ),
+            'meta'                => array(
+                'mcp' => array(
+                    'public' => true,
+                    'type'   => 'tool',
+                ),
+            ),
         )
     );
 
@@ -183,6 +219,12 @@ function mcp_avada_pro_register_abilities(): void {
                     'element_path' => array('type' => 'string'),
                 ),
                 'required'    => array('page_id', 'element_path'),
+            ),
+            'meta'                => array(
+                'mcp' => array(
+                    'public' => true,
+                    'type'   => 'tool',
+                ),
             ),
         )
     );
@@ -205,6 +247,12 @@ function mcp_avada_pro_register_abilities(): void {
                 ),
                 'required'    => array('page_id', 'structure'),
             ),
+            'meta'                => array(
+                'mcp' => array(
+                    'public' => true,
+                    'type'   => 'tool',
+                ),
+            ),
         )
     );
 
@@ -218,6 +266,12 @@ function mcp_avada_pro_register_abilities(): void {
             'permission_callback' => function(): bool {
                 return current_user_can('edit_posts');
             },
+            'meta'                => array(
+                'mcp' => array(
+                    'public' => true,
+                    'type'   => 'tool',
+                ),
+            ),
         )
     );
 
@@ -237,6 +291,12 @@ function mcp_avada_pro_register_abilities(): void {
                     'page_id' => array('type' => 'integer'),
                 ),
                 'required'    => array('page_id'),
+            ),
+            'meta'                => array(
+                'mcp' => array(
+                    'public' => true,
+                    'type'   => 'tool',
+                ),
             ),
         )
     );
