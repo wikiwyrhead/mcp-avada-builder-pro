@@ -300,6 +300,36 @@ function mcp_avada_pro_register_abilities(): void {
             ),
         )
     );
+
+    wp_register_ability(
+        'avada-pro/restructure-layout',
+        array(
+            'label'               => __('Restructure Layout (Pro)', 'mcp-avada-builder-pro'),
+            'description'         => __('Restructure elements in a container - convert inline icons to vertical columns, reorder elements, etc.', 'mcp-avada-builder-pro'),
+            'category'            => 'avada-builder-pro',
+            'execute_callback'    => 'mcp_avada_pro_restructure_layout',
+            'permission_callback' => function($params): bool {
+                return current_user_can('edit_post', $params['page_id']);
+            },
+            'input_schema'        => array(
+                'type'        => 'object',
+                'properties'  => array(
+                    'page_id' => array('type' => 'integer', 'description' => 'Page ID'),
+                    'container_index' => array('type' => 'integer', 'default' => 0, 'description' => 'Container index to restructure'),
+                    'layout_type' => array('type' => 'string', 'enum' => array('icon_vertical', 'icon_horizontal', 'to_columns', 'reorder'), 'description' => 'Type of restructuring'),
+                    'column_type' => array('type' => 'string', 'default' => '1_4', 'description' => 'Column type for new columns (1_2, 1_3, 1_4, 1_5, 1_6)'),
+                    'element_indices' => array('type' => 'array', 'items' => array('type' => 'integer'), 'description' => 'Indices of elements to restructure'),
+                ),
+                'required'    => array('page_id', 'layout_type'),
+            ),
+            'meta'                => array(
+                'mcp' => array(
+                    'public' => true,
+                    'type'   => 'tool',
+                ),
+            ),
+        )
+    );
 }
 
 function mcp_avada_pro_get_info(): array {
@@ -706,6 +736,132 @@ function mcp_avada_pro_clean_duplicates(array $params) {
         'data' => array(
             'duplicates_removed' => $duplicates,
             'remaining_elements' => count($parser->extract_all_elements($structure)),
+        ),
+    );
+}
+
+function mcp_avada_pro_restructure_layout(array $params) {
+    $post_id = $params['page_id'];
+    $post = get_post($post_id);
+    
+    if (!$post) {
+        return new WP_Error('post_not_found', 'Post not found');
+    }
+    
+    $parser = new MCP_Avada_Parser();
+    $structure = $parser->parse($post->post_content, true);
+    
+    $container_index = isset($params['container_index']) ? $params['container_index'] : 0;
+    $layout_type = $params['layout_type'];
+    $column_type = isset($params['column_type']) ? $params['column_type'] : '1_4';
+    $element_indices = isset($params['element_indices']) ? $params['element_indices'] : null;
+    $filter_content = isset($params['filter_content']) ? $params['filter_content'] : null;
+    
+    if (!isset($structure['containers'][$container_index])) {
+        return new WP_Error('container_not_found', 'Container not found at index ' . $container_index);
+    }
+    
+    $container = &$structure['containers'][$container_index];
+    
+    if ($layout_type === 'icon_vertical') {
+        $elements_to_restructure = array();
+        
+        foreach ($container['rows'] as &$row) {
+            foreach ($row['columns'] as &$column) {
+                $remaining_elements = array();
+                
+                foreach ($column['elements'] as $element) {
+                    $should_restructure = false;
+                    
+                    if ($filter_content && isset($element['content'])) {
+                        foreach ($filter_content as $keyword) {
+                            if (stripos($element['content'], $keyword) !== false) {
+                                $should_restructure = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        if ($element['type'] === 'fusion_text' && isset($element['content'])) {
+                            if (preg_match('/<i\s+class="[^"]*fa-check-circle/', $element['content'])) {
+                                $should_restructure = true;
+                            }
+                        }
+                    }
+                    
+                    if ($should_restructure) {
+                        $elements_to_restructure[] = $element;
+                    } else {
+                        $remaining_elements[] = $element;
+                    }
+                }
+                
+                $column['elements'] = $remaining_elements;
+            }
+        }
+        
+        if (empty($elements_to_restructure)) {
+            return new WP_Error('no_elements_found', 'No elements found to restructure. Try adding filter_content keywords.');
+        }
+        
+        $column_map = array(
+            '1_2' => 2,
+            '1_3' => 3,
+            '1_4' => 4,
+            '1_5' => 5,
+            '1_6' => 6,
+        );
+        $num_cols = isset($column_map[$column_type]) ? $column_map[$column_type] : 4;
+        
+        $chunks = array_chunk($elements_to_restructure, $num_cols);
+        
+        $new_row = array(
+            'id' => 'row_restructured',
+            'attributes' => array(),
+            'columns' => array(),
+        );
+        
+        $col_index = 0;
+        foreach ($chunks as $chunk) {
+            $column = array(
+                'id' => 'column_restructured_' . $col_index,
+                'attributes' => array(
+                    'type' => $column_type,
+                    'layout' => $column_type,
+                    'center_content' => 'yes',
+                    'content_layout' => 'column',
+                    'align_content' => 'center',
+                    'valign_content' => 'flex-start',
+                ),
+                'elements' => array(),
+            );
+            
+            foreach ($chunk as $element) {
+                $column['elements'][] = $element;
+            }
+            
+            $new_row['columns'][] = $column;
+            $col_index++;
+        }
+        
+        $container['rows'][] = $new_row;
+    }
+    
+    $content = $parser->generate($structure);
+    
+    wp_update_post(array(
+        'ID' => $post_id,
+        'post_content' => $content,
+    ));
+    
+    update_post_meta($post_id, '_fusion_builder_status', 'active');
+    
+    return array(
+        'success' => true,
+        'data' => array(
+            'container_index' => $container_index,
+            'layout_type' => $layout_type,
+            'elements_restructured' => count($elements_to_restructure),
+            'columns_created' => isset($new_row['columns']) ? count($new_row['columns']) : 0,
         ),
     );
 }
