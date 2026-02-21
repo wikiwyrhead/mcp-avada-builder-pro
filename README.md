@@ -171,6 +171,55 @@ After write operations, a `canonical_path` is returned that reflects the actual 
 - Avada Builder Plugin 3.0+
 - Abilities API Plugin
 
+## Prerequisites & MCP Adapter Setup
+
+To use MCP Avada Builder Pro with AI agents or external automation, you must have:
+
+- **WordPress MCP Adapter Plugin** ([mcp-adapter](https://github.com/wikiwyrhead/mcp-adapter))
+- **Abilities API Plugin** ([abilities-api](https://github.com/wikiwyrhead/abilities-api))
+- **Avada Theme** (7.0+)
+- **Avada Builder Plugin** (3.0+)
+
+### 1. Install Required Plugins
+
+1. **Abilities API**
+	- Download from [abilities-api GitHub](https://github.com/wikiwyrhead/abilities-api)
+	- Upload to `wp-content/plugins/` and activate
+
+2. **MCP Adapter**
+	- Download from [mcp-adapter GitHub](https://github.com/wikiwyrhead/mcp-adapter)
+	- Upload to `wp-content/plugins/` and activate
+
+3. **Avada Theme & Builder**
+	- Install via ThemeForest or your preferred method
+	- Activate both theme and builder plugin
+
+4. **MCP Avada Builder Pro** (this plugin)
+	- Upload to `wp-content/plugins/` and activate
+
+### 2. Verify Abilities Exposure
+
+After activation, MCP Avada Builder Pro abilities are exposed via:
+
+- **WordPress REST API:**
+  - `GET /wp-json/wp-abilities/v1/abilities` (list abilities)
+  - `POST /wp-json/wp-abilities/v1/abilities/{id}/invoke` (run ability)
+- **MCP Adapter:**
+  - `GET /wp-json/mcp/mcp-adapter-default-server` (MCP tools discovery)
+
+To test:
+
+```bash
+curl http://your-site.local/wp-json/wp-abilities/v1/abilities | jq '.[] | select(.meta.mcp.public == true)'
+```
+
+You should see all `avada-pro/*` abilities listed and callable.
+
+### 3. AI Agent/Automation Setup
+
+Configure your MCP client (e.g. @automattic/mcp-wordpress-remote) with your WordPress API URL, username, and password. See `.mcp.json` for example config.
+
+
 ---
 
 ## Installation
