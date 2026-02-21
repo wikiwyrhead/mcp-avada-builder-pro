@@ -71,6 +71,20 @@ class MCP_Avada_Elements {
                 'has_content' => false,
             ),
             array(
+                'type' => 'fusion_imageframe',
+                'name' => 'Image Frame',
+                'category' => 'media',
+                'description' => 'Display images with frame styling, borders, and effects',
+                'has_content' => true,
+            ),
+            array(
+                'type' => 'fusion_images',
+                'name' => 'Image Carousel',
+                'category' => 'media',
+                'description' => 'Display image carousel with child fusion_image items',
+                'has_content' => true,
+            ),
+            array(
                 'type' => 'fusion_gallery',
                 'name' => 'Image Gallery',
                 'category' => 'media',
@@ -424,13 +438,14 @@ class MCP_Avada_Elements {
     public function get_categories() {
         $categories = array();
         foreach ($this->elements as $element) {
-            if (!isset($categories[$element['category']])) {
-                $categories[$element['category']] = array(
-                    'name' => ucfirst($element['category']),
+            $cat = $element['category'];
+            if (!isset($categories[$cat])) {
+                $categories[$cat] = array(
+                    'name' => $cat,
                     'count' => 0,
                 );
             }
-            $categories[$element['category']]['count']++;
+            $categories[$cat]['count']++;
         }
         return $categories;
     }

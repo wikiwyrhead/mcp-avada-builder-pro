@@ -2,153 +2,67 @@
 
 Advanced MCP integration for Avada Fusion Builder with full shortcode parsing and element management.
 
-## Version: 2.0.0
+## Version: 3.2.0
 
 ---
 
 ## Overview
 
-MCP Avada Builder Pro provides comprehensive abilities for controlling Avada Fusion Builder programmatically. Unlike the basic version, this plugin features:
+MCP Avada Builder Pro provides comprehensive abilities for controlling Avada Fusion Builder programmatically via the WordPress Abilities API and MCP protocol. Features:
 
-- **Advanced Shortcode Parser** - Handles complex nested structures
-- **Full Hierarchy Support** - Container → Row → Column → Element
-- **55 Element Types** - Complete registry of Fusion Builder elements
-- **Path-based Element Access** - Unique paths like `container_0/row_0/column_0/element_1`
-- **Duplicate Detection & Cleanup** - Built-in tools to clean up page duplicates
-
----
-
-## Abilities (9 Total)
-
-### 1. **avada-pro/get-info**
-Get detailed Avada Builder information including version numbers and element count.
-
-**Returns:**
-- Builder version
-- Theme version
-- Plugin version
-- Total element types available
+- **Recursive Shortcode Parser** - Handles deeply nested structures including inner rows/columns
+- **Full Hierarchy Support** - Container > Row > Column > Element (including inner rows/columns)
+- **56 Element Types** - Complete registry of Fusion Builder elements including `fusion_imageframe`
+- **Passthrough Preservation** - Unregistered element types preserved as raw shortcode (no data loss)
+- **Path-based Element Access** - Unique paths like `container_0/row_0/column_0/fusion_text_1`
+- **Media Field Validation** - Strict validation for image_id, image URLs, gallery IDs
+- **Structural Validation** - replace-content validates structure schema before writing
+- **Write-path ID Stability** - Canonical paths returned after every write operation
+- **Data Loss Guard** - Dry-run validation on all mutations prevents silent element loss
+- **Audit Logging** - All mutations logged to post meta with timestamp/user/action
+- **Page Structure Health Check** - Validate tag balance, duplicates, round-trip fidelity
+- **Shortcode Tree Repair** - Dry-run-first repair for malformed shortcode trees
 
 ---
 
-### 2. **avada-pro/get-page-structure**
-Get complete page structure with containers, rows, columns, and elements.
+## Abilities (23 Total)
 
-**Parameters:**
-- `page_id` (required) - Page ID
-- `include_content` (optional) - Include element content in response
+### Core Page + Element Management
+- `avada-pro/get-info` - Get builder/theme/plugin versions and element count.
+- `avada-pro/get-page-structure` - Get full parsed structure for a page.
+- `avada-pro/list-all-elements` - List all page elements (optional type filter).
+- `avada-pro/add-container` - Add a container (optionally with row/column).
+- `avada-pro/add-element` - Add an element to container/row/column coordinates.
+- `avada-pro/update-element` - Update element content/attributes by path.
+- `avada-pro/delete-element` - Delete element by path.
+- `avada-pro/replace-content` - Replace whole page content from structure object (with structural validation and backup).
+- `avada-pro/list-element-types` - List all static element types (56).
+- `avada-pro/clean-duplicates` - Remove duplicate elements in a page.
 
-**Returns:**
-- Container count
-- Full hierarchy with paths
-- Element details
+### Layout Operations
+- `avada-pro/restructure-layout` - Restructure a target row based on matching content.
+- `avada-pro/duplicate-element` - Clone element in place.
+- `avada-pro/move-element` - Move element across container/row/column.
+- `avada-pro/find-element` - Search page elements by type/content/attribute.
+- `avada-pro/bulk-update` - Update multiple elements in one save (transactional, all-or-nothing).
 
----
+### Page Lifecycle
+- `avada-pro/create-page` - Create draft/published page/post with Avada enabled.
+- `avada-pro/list-pages` - List posts/pages where Avada Builder is active.
 
-### 3. **avada-pro/list-all-elements**
-List all elements on a page with their full details and hierarchy.
+### Element Schema Introspection
+- `avada-pro/get-element-schema` - Get runtime/static parameter schema for a shortcode.
+- `avada-pro/get-element-defaults` - Get runtime defaults from FusionSC/runtime params.
+- `avada-pro/list-element-categories` - List categories + per-category elements.
+- `avada-pro/search-elements` - Search available element types by keyword/category.
 
-**Parameters:**
-- `page_id` (required) - Page ID
-- `element_type` (optional) - Filter by element type
-
-**Returns:**
-- Array of elements with paths and locations
-
----
-
-### 4. **avada-pro/add-container**
-Add a new container with optional row and column.
-
-**Parameters:**
-- `page_id` (required) - Page ID
-- `container_attrs` (optional) - Container attributes
-- `add_row` (optional, default: true) - Add a row automatically
-- `column_type` (optional, default: '1_1') - Column layout type
-
----
-
-### 5. **avada-pro/add-element**
-Add a new element to a specific container/row/column position.
-
-**Parameters:**
-- `page_id` (required) - Page ID
-- `element_type` (required) - Type of element to add
-- `container_index` (optional, default: 0) - Target container
-- `row_index` (optional, default: 0) - Target row
-- `column_index` (optional, default: 0) - Target column
-- `attributes` (optional) - Element attributes
-- `content` (optional) - Element content
-
-**Returns:**
-- Element details with generated ID
-- Full path to the element
+### Validation & Repair (v3.2.0)
+- `avada-pro/validate-page-structure` - Health check: tag balance, duplicates, round-trip fidelity, builder status. Returns health score.
+- `avada-pro/repair-shortcode-tree` - Repair malformed shortcode trees (dry-run by default). Removes duplicates, cleans empty containers, creates backup.
 
 ---
 
-### 6. **avada-pro/update-element**
-Update an element by its unique path.
-
-**Parameters:**
-- `page_id` (required) - Page ID
-- `element_path` (required) - Path like `container_0/row_0/column_0/element_1`
-- `attributes` (optional) - Updated attributes
-- `content` (optional) - Updated content
-
-**Error Messages:**
-- Returns available element paths if element not found
-
----
-
-### 7. **avada-pro/delete-element**
-Delete an element by its path.
-
-**Parameters:**
-- `page_id` (required) - Page ID
-- `element_path` (required) - Element path
-
-**Error Messages:**
-- Returns available element paths if element not found
-
----
-
-### 8. **avada-pro/replace-content**
-Replace entire page content with new structure.
-
-**Parameters:**
-- `page_id` (required) - Page ID
-- `structure` (required) - Complete new structure
-
-**Returns:**
-- Preview URL
-- Update confirmation
-
----
-
-### 9. **avada-pro/list-element-types**
-Get all 55 available Avada element types with their categories and schemas.
-
-**Returns:**
-- Element name
-- Category (layout, content, media, typography, social)
-- Description
-- Has_content flag
-
----
-
-### 10. **avada-pro/clean-duplicates**
-Remove duplicate elements from a page.
-
-**Parameters:**
-- `page_id` (required) - Page ID
-
-**Returns:**
-- Number of duplicates removed
-- Remaining element count
-
----
-
-## Supported Element Types (55 Total)
+## Supported Element Types (56 Total)
 
 ### Layout Elements
 - `fusion_builder_container` - Main wrapper
@@ -161,6 +75,7 @@ Remove duplicate elements from a page.
 - `fusion_tooltip` - Hover tooltips
 - `fusion_popover` - Click popovers
 - `fusion_modal` - Popup modals
+- `fusion_modal_text_link` - Modal trigger link
 - `fusion_viewport` - Visibility control
 
 ### Content Elements
@@ -170,6 +85,7 @@ Remove duplicate elements from a page.
 - `fusion_separator` - Visual dividers
 - `fusion_alert` - Notification boxes
 - `fusion_code` - Code blocks
+- `fusion_code_block` - Code block wrapper
 - `fusion_syntax_highlighter` - Advanced code
 - `fusion_table` - Data tables
 - `fusion_tagline` - Callout boxes
@@ -180,9 +96,21 @@ Remove duplicate elements from a page.
 - `fusion_portfolio` - Portfolio items
 - `fusion_portfolio_masonry` - Masonry layout
 - `fusion_faq` - FAQ sections
+- `fusion_counter` - Animated counters
+- `fusion_counters` - Multiple counters
+- `fusion_progress` - Progress bars
+- `fusion_testimonial` - Testimonials
+- `fusion_testimonials` - Testimonial slider
+- `fusion_pricing_table` - Pricing columns
+- `fusion_pricing_column` - Single tier
+- `fusion_pricing_price` - Price display
+- `fusion_pricing_button` - CTA buttons
+- `fusion_person` - Team profiles
 
 ### Media Elements
 - `fusion_image` - Images
+- `fusion_imageframe` - Image frames with styling and effects
+- `fusion_images` - Image carousel
 - `fusion_gallery` - Image galleries
 - `fusion_video` - Video embeds
 - `fusion_audio` - Audio players
@@ -200,52 +128,39 @@ Remove duplicate elements from a page.
 - `fusion_highlight` - Text highlighting
 - `fusion_dropcap` - Large first letters
 
-### Pricing Elements
-- `fusion_pricing_table` - Pricing columns
-- `fusion_pricing_column` - Single tier
-- `fusion_pricing_price` - Price display
-- `fusion_pricing_button` - CTA buttons
-
-### Statistics Elements
-- `fusion_counter` - Animated counters
-- `fusion_counters` - Multiple counters
-- `fusion_progress` - Progress bars
-- `fusion_testimonial` - Testimonials
-- `fusion_testimonials` - Testimonial slider
-
 ### Social Elements
 - `fusion_social_links` - Social icons
-- `fusion_person` - Team profiles
 
 ---
 
 ## Column Types
 
-The plugin supports all Avada column layouts:
-
-- `1_1` - Full width (1/1)
-- `1_2` - Half width (1/2)
-- `2_3` - Two-thirds (2/3)
-- `1_3` - One-third (1/3)
-- `3_5` - Three-fifths (3/5)
-- `1_4` - One-fourth (1/4)
-- `3_4` - Three-fourths (3/4)
-- `1_5` - One-fifth (1/5)
-- `2_5` - Two-fifths (2/5)
-- `4_5` - Four-fifths (4/5)
-- `1_6` - One-sixth (1/6)
-- `5_6` - Five-sixths (5/6)
+All Avada column layouts supported:
+`1_1`, `1_2`, `2_3`, `1_3`, `3_5`, `1_4`, `3_4`, `1_5`, `2_5`, `4_5`, `1_6`, `5_6`
 
 ---
 
 ## Element Paths
 
-Each element has a unique path in the format:
+Each element has a unique path:
 ```
 container_{index}/row_{index}/column_{index}/{element_type}_{index}
 ```
-
 Example: `container_0/row_0/column_0/fusion_text_2`
+
+After write operations, a `canonical_path` is returned that reflects the actual persisted path (stable across save cycles).
+
+---
+
+## Safety Features
+
+- **Data Loss Guard** - Every mutation validates shortcode tag counts before/after write. Blocks operations that would lose elements.
+- **Structural Validation** - `replace-content` validates container/row/column hierarchy before accepting.
+- **Media Validation** - `image_id` verified against media library, URLs validated, gallery IDs checked.
+- **Transactional Bulk Updates** - All-or-nothing validation: either all updates pass or none are applied.
+- **Automatic Backups** - `replace-content` and `repair-shortcode-tree` store backups in post meta before destructive operations.
+- **Audit Logging** - All mutations logged with timestamp, user, ability, and action description (last 100 events per post).
+- **Passthrough Elements** - Unregistered shortcodes are preserved as raw text during parse/generate cycles.
 
 ---
 
@@ -268,14 +183,31 @@ Example: `container_0/row_0/column_0/fusion_text_2`
 
 ## Changelog
 
+### 3.2.0
+- **Parser fixes**: Fixed all prefix-collision regex patterns (fusion_image/imageframe/images, tab/tabs, counter/counters, content_box/content_boxes, etc.)
+- **Parser fixes**: Container parser now uses recursive `parse_nested_shortcode` instead of non-greedy regex
+- **Media validation**: Added strict validation for image_id, image URLs, gallery image_ids in add-element and update-element
+- **Write-path stability**: All write operations now return `canonical_path` from re-read after save
+- **replace-content hardened**: Structural schema validation, empty content rejection, automatic backup before replace
+- **New ability**: `validate-page-structure` - Health check with tag balance, duplicates, round-trip fidelity
+- **New ability**: `repair-shortcode-tree` - Dry-run-first repair with duplicate removal and empty container cleanup
+- **Registry**: Added `fusion_imageframe` to static elements registry (56 types total)
+- **Version**: Bumped to 3.2.0 (23 abilities total)
+
+### 3.1.2
+- Hardened permission callbacks with input validation on all 12 post-specific abilities
+- Added element type and attribute validation helpers
+- Transactional safety for bulk-update (all-or-nothing validation)
+- Audit logging system for all mutation operations
+
+### 3.1.0
+- Added schema introspection abilities: `get-element-schema`, `get-element-defaults`, `list-element-categories`, `search-elements`
+
+### 3.0.0
+- Added advanced editing abilities: `create-page`, `list-pages`, `duplicate-element`, `move-element`, `find-element`, `bulk-update`, `restructure-layout`
+
 ### 2.0.0
-- Initial Pro release
-- Advanced shortcode parser with nested support
-- 55 element types
-- Path-based element identification
-- Container/row/column management
-- Duplicate cleanup tool
-- Better error messages
+- Initial Pro release with parser, hierarchy management, and core CRUD abilities.
 
 ---
 
@@ -283,10 +215,3 @@ Example: `container_0/row_0/column_0/fusion_text_2`
 
 **arnelG**
 - GitHub: @wikiwyrhead
-- Website: https://github.com/wikiwyrhead/mcp-avada-builder
-
----
-
-## License
-
-GPL-2.0-or-later
