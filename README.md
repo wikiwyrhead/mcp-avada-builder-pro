@@ -2,7 +2,7 @@
 
 Advanced MCP integration for Avada Fusion Builder with full shortcode parsing and element management.
 
-## Version: 3.2.0
+## Version: 3.3.1
 
 ---
 
@@ -25,7 +25,7 @@ MCP Avada Builder Pro provides comprehensive abilities for controlling Avada Fus
 
 ---
 
-## Abilities (23 Total)
+## Abilities (28 Total)
 
 ### Core Page + Element Management
 - `avada-pro/get-info` - Get builder/theme/plugin versions and element count.
@@ -45,6 +45,11 @@ MCP Avada Builder Pro provides comprehensive abilities for controlling Avada Fus
 - `avada-pro/move-element` - Move element across container/row/column.
 - `avada-pro/find-element` - Search page elements by type/content/attribute.
 - `avada-pro/bulk-update` - Update multiple elements in one save (transactional, all-or-nothing).
+- `avada-pro/select-columns` - Select columns by scoped selector (container label/index, row, column indexes, attrs, contained element type).
+- `avada-pro/bulk-update-columns` - Bulk patch column attributes via selector or explicit paths (dry-run supported).
+- `avada-pro/clone-column-style` - Clone source column style to targets with preserve-keys (dry-run supported).
+- `avada-pro/clone-element-style` - Clone source element style attributes to target elements (dry-run supported).
+- `avada-pro/enforce-responsive-policy` - Apply desktop/tablet/mobile column width policy in bulk (dry-run supported).
 
 ### Page Lifecycle
 - `avada-pro/create-page` - Create draft/published page/post with Avada enabled.
@@ -230,7 +235,49 @@ Configure your MCP client (e.g. @automattic/mcp-wordpress-remote) with your Word
 
 ---
 
+## Structured Editing Patterns (Examples)
+
+### 1) Source-of-truth card replication (columns)
+- Use `clone-column-style` with:
+  - `source_column_path`: e.g. `container_5/row_0/column_1`
+  - `selector`: scoped to target section
+  - `preserve_attributes`: e.g. `type`, `type_medium`, `type_small`, `first`, `last`, `class`, `id`
+  - `dry_run: true` first, then `false`
+
+### 2) Shadow synchronization across many cards
+- Use `bulk-update-columns`:
+  - `selector`: target cards
+  - `column_attributes`: `{ "box_shadow_horizontal": "2", "box_shadow_vertical": "2" }`
+  - `dry_run: true` first
+
+### 3) Responsive stacking normalization
+- Use `enforce-responsive-policy`:
+  - `desktop: "keep"`
+  - `tablet: "1_2"`
+  - `mobile: "1_1"`
+  - selector scoped to target card set
+
+### 4) Element-level style cloning (icon/title/image)
+- Use `clone-element-style`:
+  - `source_element_path`: e.g. first card `fusion_title`/`fusion_fontawesome`/`fusion_image` element
+  - `selector.element_type`: target same element type
+  - `preserve_attributes`: keep content identity keys (e.g. image/link/text-specific attrs)
+  - `dry_run: true` first
+
+---
+
 ## Changelog
+
+### 3.3.1
+- Added `avada-pro/clone-element-style` for source-of-truth element attribute cloning with preserve-key controls.
+- Added `avada-pro/enforce-responsive-policy` for bulk desktop/tablet/mobile width policy enforcement.
+- Added selector helper for structured element targeting in style-clone workflows.
+- Added dry-run-first workflow examples for bulk styling and responsive normalization.
+
+### 3.3.0
+- Added `avada-pro/select-columns` for scoped column querying by container label/index, row/index, attrs, and element presence.
+- Added `avada-pro/bulk-update-columns` with dry-run before/after diffs.
+- Added `avada-pro/clone-column-style` with preserve-key controls and dry-run preview.
 
 ### 3.2.0
 - **Parser fixes**: Fixed all prefix-collision regex patterns (fusion_image/imageframe/images, tab/tabs, counter/counters, content_box/content_boxes, etc.)

@@ -3,7 +3,7 @@
 /**
  * Plugin Name: MCP Avada Builder Pro
  * Description: Advanced MCP integration for Avada Fusion Builder with full shortcode parsing and element management
- * Version: 3.2.0
+ * Version: 3.3.1
  * Author: arnelG
  * Author URI: https://github.com/wikiwyrhead
  * Plugin URI: https://github.com/wikiwyrhead/mcp-avada-builder
@@ -16,7 +16,85 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('MCP_AVADA_VERSION', '3.2.0');
+define('MCP_AVADA_VERSION', '3.3.1');
+
+/**
+ * Get default Avada container attributes for backend compatibility.
+ * These attributes are required for the Avada Builder backend to work properly.
+ * 
+ * @param array $user_attrs User-provided attributes that will override defaults
+ * @return array Merged attributes
+ */
+function mcp_avada_pro_get_default_container_attrs($user_attrs = array()): array
+{
+    $defaults = array(
+        'type' => 'flex',
+        'hundred_percent' => 'no',
+        'hundred_percent_height' => 'no',
+        'hundred_percent_height_scroll' => 'no',
+        'align_content' => 'stretch',
+        'flex_align_items' => 'flex-start',
+        'flex_justify_content' => 'flex-start',
+        'flex_wrap' => 'wrap',
+        'hundred_percent_height_center_content' => 'yes',
+        'equal_height_columns' => 'no',
+        'container_tag' => 'div',
+        'hide_on_mobile' => 'small-visibility,medium-visibility,large-visibility',
+        'status' => 'published',
+        'border_style' => 'solid',
+    );
+
+    return array_merge($defaults, $user_attrs);
+}
+
+/**
+ * Get default Avada column attributes for backend compatibility.
+ * 
+ * @param array $user_attrs User-provided attributes that will override defaults
+ * @param bool $is_first Whether this is the first column in the row
+ * @param bool $is_last Whether this is the last column in the row
+ * @return array Merged attributes
+ */
+function mcp_avada_pro_get_default_column_attrs($user_attrs = array(), $is_first = true, $is_last = true): array
+{
+    $defaults = array(
+        'layout' => '1_1',
+        'center_content' => 'no',
+        'background_blend_mode' => 'overlay',
+        'first' => $is_first ? 'true' : 'false',
+        'last' => $is_last ? 'true' : 'false',
+        'hover_type' => 'none',
+        'border_position' => 'all',
+    );
+
+    return array_merge($defaults, $user_attrs);
+}
+
+/**
+ * Ensure required post meta is set for Avada Builder backend to work.
+ * 
+ * @param int $post_id Post ID
+ */
+function mcp_avada_pro_ensure_post_meta($post_id): void
+{
+    // Set fusion_builder_status meta (without underscore - this is what Avada uses)
+    update_post_meta($post_id, 'fusion_builder_status', 'active');
+
+    // Ensure _fusion meta has required page settings
+    $existing_fusion = get_post_meta($post_id, '_fusion', true);
+    if (empty($existing_fusion) || !is_array($existing_fusion)) {
+        $default_fusion = array(
+            'bg_full' => 'no',
+            'slider_visibility' => 'small-visibility,medium-visibility,large-visibility',
+            'show_first_featured_image' => 'yes',
+            'page_title_bar' => 'default',
+            'pages_sidebar' => 'default_sidebar',
+            'pages_sidebar_2' => 'default_sidebar',
+            'sidebar_sticky' => 'default',
+        );
+        update_post_meta($post_id, '_fusion', $default_fusion);
+    }
+}
 
 add_action('wp_abilities_api_categories_init', 'mcp_avada_pro_register_category');
 function mcp_avada_pro_register_category(): void
@@ -748,6 +826,248 @@ function mcp_avada_pro_register_abilities(): void
         )
     );
 
+    wp_register_ability(
+        'avada-pro/select-columns',
+        array(
+            'label' => __('Select Columns (Pro)', 'mcp-avada-builder-pro'),
+            'description' => __('Select columns by scoped query (container label/index, row, column indexes, attributes, and contained element type).', 'mcp-avada-builder-pro'),
+            'category' => 'avada-builder-pro',
+            'execute_callback' => 'mcp_avada_pro_select_columns',
+            'permission_callback' => function ($params): bool {
+                if (!isset($params['page_id']) || !is_int($params['page_id']) || $params['page_id'] <= 0) {
+                    return false;
+                }
+                return current_user_can('edit_post', $params['page_id']);
+            },
+            'input_schema' => array(
+                'type' => 'object',
+                'properties' => array(
+                    'page_id' => array('type' => 'integer'),
+                    'selector' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'container_index' => array('type' => 'integer'),
+                            'container_label' => array('type' => 'string'),
+                            'row_index' => array('type' => 'integer'),
+                            'column_index' => array('type' => 'integer'),
+                            'column_indexes' => array('type' => 'array', 'items' => array('type' => 'integer')),
+                            'attribute' => array('type' => 'string'),
+                            'attribute_value' => array('type' => 'string'),
+                            'has_element_type' => array('type' => 'string'),
+                            'limit' => array('type' => 'integer'),
+                        ),
+                    ),
+                ),
+                'required' => array('page_id'),
+            ),
+            'output_schema' => array(
+                'type' => 'object',
+                'properties' => array(
+                    'success' => array('type' => 'boolean'),
+                    'data' => array('type' => 'object'),
+                ),
+            ),
+            'meta' => array(
+                'show_in_rest' => true,
+                'mcp' => array('public' => true, 'type' => 'tool'),
+                'annotations' => array(
+                    'readonly' => true,
+                    'destructive' => false,
+                    'idempotent' => true,
+                ),
+            ),
+        )
+    );
+
+    wp_register_ability(
+        'avada-pro/bulk-update-columns',
+        array(
+            'label' => __('Bulk Update Columns (Pro)', 'mcp-avada-builder-pro'),
+            'description' => __('Bulk update column attributes by selector or explicit column paths. Supports dry-run diff preview.', 'mcp-avada-builder-pro'),
+            'category' => 'avada-builder-pro',
+            'execute_callback' => 'mcp_avada_pro_bulk_update_columns',
+            'permission_callback' => function ($params): bool {
+                if (!isset($params['page_id']) || !is_int($params['page_id']) || $params['page_id'] <= 0) {
+                    return false;
+                }
+                return current_user_can('edit_post', $params['page_id']);
+            },
+            'input_schema' => array(
+                'type' => 'object',
+                'properties' => array(
+                    'page_id' => array('type' => 'integer'),
+                    'selector' => array('type' => 'object'),
+                    'column_paths' => array('type' => 'array', 'items' => array('type' => 'string')),
+                    'column_attributes' => array('type' => 'object'),
+                    'dry_run' => array('type' => 'boolean', 'default' => true),
+                ),
+                'required' => array('page_id', 'column_attributes'),
+            ),
+            'output_schema' => array(
+                'type' => 'object',
+                'properties' => array(
+                    'success' => array('type' => 'boolean'),
+                    'data' => array('type' => 'object'),
+                ),
+            ),
+            'meta' => array(
+                'show_in_rest' => true,
+                'mcp' => array('public' => true, 'type' => 'tool'),
+                'annotations' => array(
+                    'readonly' => false,
+                    'destructive' => false,
+                    'idempotent' => true,
+                ),
+            ),
+        )
+    );
+
+    wp_register_ability(
+        'avada-pro/clone-column-style',
+        array(
+            'label' => __('Clone Column Style (Pro)', 'mcp-avada-builder-pro'),
+            'description' => __('Copy source column attributes to target columns with preserve-key controls. Supports dry-run preview.', 'mcp-avada-builder-pro'),
+            'category' => 'avada-builder-pro',
+            'execute_callback' => 'mcp_avada_pro_clone_column_style',
+            'permission_callback' => function ($params): bool {
+                if (!isset($params['page_id']) || !is_int($params['page_id']) || $params['page_id'] <= 0) {
+                    return false;
+                }
+                return current_user_can('edit_post', $params['page_id']);
+            },
+            'input_schema' => array(
+                'type' => 'object',
+                'properties' => array(
+                    'page_id' => array('type' => 'integer'),
+                    'source_column_path' => array('type' => 'string'),
+                    'target_column_paths' => array('type' => 'array', 'items' => array('type' => 'string')),
+                    'selector' => array('type' => 'object'),
+                    'preserve_attributes' => array('type' => 'array', 'items' => array('type' => 'string')),
+                    'dry_run' => array('type' => 'boolean', 'default' => true),
+                ),
+                'required' => array('page_id', 'source_column_path'),
+            ),
+            'output_schema' => array(
+                'type' => 'object',
+                'properties' => array(
+                    'success' => array('type' => 'boolean'),
+                    'data' => array('type' => 'object'),
+                ),
+            ),
+            'meta' => array(
+                'show_in_rest' => true,
+                'mcp' => array('public' => true, 'type' => 'tool'),
+                'annotations' => array(
+                    'readonly' => false,
+                    'destructive' => false,
+                    'idempotent' => true,
+                ),
+            ),
+        )
+    );
+
+    wp_register_ability(
+        'avada-pro/clone-element-style',
+        array(
+            'label' => __('Clone Element Style (Pro)', 'mcp-avada-builder-pro'),
+            'description' => __('Copy source element attributes to target elements with preserve-key controls. Supports selector targeting and dry-run preview.', 'mcp-avada-builder-pro'),
+            'category' => 'avada-builder-pro',
+            'execute_callback' => 'mcp_avada_pro_clone_element_style',
+            'permission_callback' => function ($params): bool {
+                if (!isset($params['page_id']) || !is_int($params['page_id']) || $params['page_id'] <= 0) {
+                    return false;
+                }
+                return current_user_can('edit_post', $params['page_id']);
+            },
+            'input_schema' => array(
+                'type' => 'object',
+                'properties' => array(
+                    'page_id' => array('type' => 'integer'),
+                    'source_element_path' => array('type' => 'string'),
+                    'target_element_paths' => array('type' => 'array', 'items' => array('type' => 'string')),
+                    'selector' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'container_index' => array('type' => 'integer'),
+                            'container_label' => array('type' => 'string'),
+                            'row_index' => array('type' => 'integer'),
+                            'column_index' => array('type' => 'integer'),
+                            'element_type' => array('type' => 'string'),
+                            'attribute' => array('type' => 'string'),
+                            'attribute_value' => array('type' => 'string'),
+                            'search' => array('type' => 'string'),
+                            'limit' => array('type' => 'integer'),
+                        ),
+                    ),
+                    'preserve_attributes' => array('type' => 'array', 'items' => array('type' => 'string')),
+                    'dry_run' => array('type' => 'boolean', 'default' => true),
+                ),
+                'required' => array('page_id', 'source_element_path'),
+            ),
+            'output_schema' => array(
+                'type' => 'object',
+                'properties' => array(
+                    'success' => array('type' => 'boolean'),
+                    'data' => array('type' => 'object'),
+                ),
+            ),
+            'meta' => array(
+                'show_in_rest' => true,
+                'mcp' => array('public' => true, 'type' => 'tool'),
+                'annotations' => array(
+                    'readonly' => false,
+                    'destructive' => false,
+                    'idempotent' => true,
+                ),
+            ),
+        )
+    );
+
+    wp_register_ability(
+        'avada-pro/enforce-responsive-policy',
+        array(
+            'label' => __('Enforce Responsive Policy (Pro)', 'mcp-avada-builder-pro'),
+            'description' => __('Apply responsive column policy (desktop/tablet/mobile widths) to selected columns. Supports dry-run preview.', 'mcp-avada-builder-pro'),
+            'category' => 'avada-builder-pro',
+            'execute_callback' => 'mcp_avada_pro_enforce_responsive_policy',
+            'permission_callback' => function ($params): bool {
+                if (!isset($params['page_id']) || !is_int($params['page_id']) || $params['page_id'] <= 0) {
+                    return false;
+                }
+                return current_user_can('edit_post', $params['page_id']);
+            },
+            'input_schema' => array(
+                'type' => 'object',
+                'properties' => array(
+                    'page_id' => array('type' => 'integer'),
+                    'selector' => array('type' => 'object'),
+                    'column_paths' => array('type' => 'array', 'items' => array('type' => 'string')),
+                    'desktop' => array('type' => 'string', 'description' => 'Desktop width policy (e.g. keep, 1_3, 1_4)'),
+                    'tablet' => array('type' => 'string', 'description' => 'Tablet width policy, maps to type_medium'),
+                    'mobile' => array('type' => 'string', 'description' => 'Mobile width policy, maps to type_small'),
+                    'dry_run' => array('type' => 'boolean', 'default' => true),
+                ),
+                'required' => array('page_id'),
+            ),
+            'output_schema' => array(
+                'type' => 'object',
+                'properties' => array(
+                    'success' => array('type' => 'boolean'),
+                    'data' => array('type' => 'object'),
+                ),
+            ),
+            'meta' => array(
+                'show_in_rest' => true,
+                'mcp' => array('public' => true, 'type' => 'tool'),
+                'annotations' => array(
+                    'readonly' => false,
+                    'destructive' => false,
+                    'idempotent' => true,
+                ),
+            ),
+        )
+    );
+
     // --- Priority 2: Schema Introspection abilities (v3.1.0) ---
 
     wp_register_ability(
@@ -991,6 +1311,11 @@ function mcp_avada_pro_register_mcp_server($adapter): void
         'avada-pro/move-element',
         'avada-pro/find-element',
         'avada-pro/bulk-update',
+        'avada-pro/select-columns',
+        'avada-pro/bulk-update-columns',
+        'avada-pro/clone-column-style',
+        'avada-pro/clone-element-style',
+        'avada-pro/enforce-responsive-policy',
         'avada-pro/get-element-schema',
         'avada-pro/get-element-defaults',
         'avada-pro/list-element-categories',
@@ -1062,7 +1387,7 @@ function mcp_avada_pro_get_page_structure(array $params)
         'data' => array(
             'post_id' => $post_id,
             'title' => $post->post_title,
-            'builder_enabled' => get_post_meta($post_id, '_fusion_builder_status', true) === 'active',
+            'builder_enabled' => get_post_meta($post_id, 'fusion_builder_status', true) === 'active' || get_post_meta($post_id, '_fusion_builder_status', true) === 'active',
             'containers_count' => count($structure['containers']),
             'structure' => $structure,
         ),
@@ -1107,23 +1432,40 @@ function mcp_avada_pro_add_container(array $params)
     $parser = new MCP_Avada_Parser();
     $structure = $parser->parse($post->post_content, true);
 
+    // Get user attrs and merge with defaults for Avada backend compatibility
+    $user_attrs = isset($params['container_attrs']) ? $params['container_attrs'] : array();
+    $container_attrs = mcp_avada_pro_get_default_container_attrs($user_attrs);
+
+    // Add padding if specified by user
+    if (isset($params['container_attrs']['padding_top'])) {
+        $container_attrs['padding_top'] = $params['container_attrs']['padding_top'];
+    }
+    if (isset($params['container_attrs']['padding_bottom'])) {
+        $container_attrs['padding_bottom'] = $params['container_attrs']['padding_bottom'];
+    }
+    if (isset($params['container_attrs']['background_color'])) {
+        $container_attrs['background_color'] = $params['container_attrs']['background_color'];
+    }
+
     $container = array(
         'id' => 'container_' . count($structure['containers']),
-        'attributes' => isset($params['container_attrs']) ? $params['container_attrs'] : array(
-            'padding_top' => '40px',
-            'padding_bottom' => '40px',
-        ),
+        'attributes' => $container_attrs,
         'rows' => array(),
     );
 
     if (isset($params['add_row']) && $params['add_row']) {
+        $column_type = isset($params['column_type']) ? $params['column_type'] : '1_1';
         $row = array(
             'id' => 'row_0',
             'attributes' => array(),
             'columns' => array(
                 array(
                     'id' => 'column_0',
-                    'attributes' => array('type' => isset($params['column_type']) ? $params['column_type'] : '1_1'),
+                    'attributes' => mcp_avada_pro_get_default_column_attrs(
+                        array('type' => $column_type),
+                        true,  // is_first
+                        true   // is_last (single column)
+                    ),
                     'elements' => array(),
                 ),
             ),
@@ -1150,6 +1492,13 @@ function mcp_avada_pro_add_container(array $params)
         'ID' => $post_id,
         'post_content' => $content,
     ), true);
+
+    if (is_wp_error($result)) {
+        return $result;
+    }
+
+    // Ensure required post meta is set for Avada backend
+    mcp_avada_pro_ensure_post_meta($post_id);
     if (is_wp_error($result)) {
         return $result;
     }
@@ -1518,7 +1867,8 @@ function mcp_avada_pro_replace_content(array $params)
         return $result;
     }
 
-    update_post_meta($post_id, '_fusion_builder_status', 'active');
+    // Ensure required post meta is set for Avada backend (using helper function)
+    mcp_avada_pro_ensure_post_meta($post_id);
     update_post_meta($post_id, '_fusion_builder_version', defined('FUSION_BUILDER_VERSION') ? FUSION_BUILDER_VERSION : '3.0');
 
     // ✅ AUDIT LOGGING
@@ -2056,6 +2406,190 @@ function mcp_avada_pro_parse_element_path($element_path)
 }
 
 /**
+ * Helper: Parse a column path string into validated indices.
+ * Format: container_X/row_Y/column_Z
+ */
+function mcp_avada_pro_parse_column_path($column_path)
+{
+    $parts = explode('/', $column_path);
+    if (count($parts) < 3 || strpos($parts[0], 'container_') !== 0 || strpos($parts[1], 'row_') !== 0 || strpos($parts[2], 'column_') !== 0) {
+        return new WP_Error('invalid_path', 'Invalid column path. Use format: container_X/row_Y/column_Z');
+    }
+
+    return array(
+        'container_index' => (int) str_replace('container_', '', $parts[0]),
+        'row_index' => (int) str_replace('row_', '', $parts[1]),
+        'column_index' => (int) str_replace('column_', '', $parts[2]),
+    );
+}
+
+/**
+ * Helper: Select columns from structure by scoped selector.
+ */
+function mcp_avada_pro_select_columns_from_structure(array $structure, array $selector = array()): array
+{
+    $results = array();
+    $limit = isset($selector['limit']) ? max(1, (int) $selector['limit']) : 0;
+    $container_label = isset($selector['container_label']) ? sanitize_text_field($selector['container_label']) : null;
+    $has_element_type = isset($selector['has_element_type']) ? sanitize_key($selector['has_element_type']) : null;
+    $attribute = isset($selector['attribute']) ? sanitize_key($selector['attribute']) : null;
+    $attribute_value = isset($selector['attribute_value']) ? (string) $selector['attribute_value'] : null;
+    $column_indexes = isset($selector['column_indexes']) && is_array($selector['column_indexes']) ? array_map('intval', $selector['column_indexes']) : null;
+
+    foreach (($structure['containers'] ?? array()) as $ci => $container) {
+        if (isset($selector['container_index']) && (int) $selector['container_index'] !== (int) $ci) {
+            continue;
+        }
+        if ($container_label !== null) {
+            $label = isset($container['attributes']['admin_label']) ? (string) $container['attributes']['admin_label'] : '';
+            if ($label !== $container_label) {
+                continue;
+            }
+        }
+
+        foreach (($container['rows'] ?? array()) as $ri => $row) {
+            if (isset($selector['row_index']) && (int) $selector['row_index'] !== (int) $ri) {
+                continue;
+            }
+
+            foreach (($row['columns'] ?? array()) as $coli => $column) {
+                if (isset($selector['column_index']) && (int) $selector['column_index'] !== (int) $coli) {
+                    continue;
+                }
+                if (is_array($column_indexes) && !in_array((int) $coli, $column_indexes, true)) {
+                    continue;
+                }
+
+                if ($attribute) {
+                    if (!isset($column['attributes'][$attribute])) {
+                        continue;
+                    }
+                    if ($attribute_value !== null && (string) $column['attributes'][$attribute] !== $attribute_value) {
+                        continue;
+                    }
+                }
+
+                if ($has_element_type) {
+                    $found_type = false;
+                    foreach (($column['elements'] ?? array()) as $el) {
+                        if (($el['type'] ?? '') === $has_element_type) {
+                            $found_type = true;
+                            break;
+                        }
+                    }
+                    if (!$found_type) {
+                        continue;
+                    }
+                }
+
+                $results[] = array(
+                    'container_index' => $ci,
+                    'row_index' => $ri,
+                    'column_index' => $coli,
+                    'path' => 'container_' . $ci . '/row_' . $ri . '/column_' . $coli,
+                    'attributes' => isset($column['attributes']) ? $column['attributes'] : array(),
+                    'element_count' => isset($column['elements']) ? count($column['elements']) : 0,
+                );
+
+                if ($limit > 0 && count($results) >= $limit) {
+                    return $results;
+                }
+            }
+        }
+    }
+
+    return $results;
+}
+
+/**
+ * Helper: Select elements from structure by scoped selector.
+ */
+function mcp_avada_pro_select_elements_from_structure(array $structure, array $selector = array()): array
+{
+    $results = array();
+    $limit = isset($selector['limit']) ? max(1, (int) $selector['limit']) : 0;
+    $container_label = isset($selector['container_label']) ? sanitize_text_field($selector['container_label']) : null;
+    $element_type = isset($selector['element_type']) ? sanitize_key($selector['element_type']) : null;
+    $attribute = isset($selector['attribute']) ? sanitize_key($selector['attribute']) : null;
+    $attribute_value = isset($selector['attribute_value']) ? (string) $selector['attribute_value'] : null;
+    $search = isset($selector['search']) ? strtolower((string) $selector['search']) : null;
+
+    foreach (($structure['containers'] ?? array()) as $ci => $container) {
+        if (isset($selector['container_index']) && (int) $selector['container_index'] !== (int) $ci) {
+            continue;
+        }
+        if ($container_label !== null) {
+            $label = isset($container['attributes']['admin_label']) ? (string) $container['attributes']['admin_label'] : '';
+            if ($label !== $container_label) {
+                continue;
+            }
+        }
+
+        foreach (($container['rows'] ?? array()) as $ri => $row) {
+            if (isset($selector['row_index']) && (int) $selector['row_index'] !== (int) $ri) {
+                continue;
+            }
+
+            foreach (($row['columns'] ?? array()) as $coli => $column) {
+                if (isset($selector['column_index']) && (int) $selector['column_index'] !== (int) $coli) {
+                    continue;
+                }
+
+                foreach (($column['elements'] ?? array()) as $el) {
+                    $type = isset($el['type']) ? $el['type'] : '';
+                    if ($element_type && $type !== $element_type) {
+                        continue;
+                    }
+
+                    if ($attribute) {
+                        if (!isset($el['attributes'][$attribute])) {
+                            continue;
+                        }
+                        if ($attribute_value !== null && (string) $el['attributes'][$attribute] !== $attribute_value) {
+                            continue;
+                        }
+                    }
+
+                    if ($search !== null) {
+                        $found = false;
+                        if (isset($el['content']) && strpos(strtolower((string) $el['content']), $search) !== false) {
+                            $found = true;
+                        }
+                        if (!$found && isset($el['attributes']) && is_array($el['attributes'])) {
+                            foreach ($el['attributes'] as $v) {
+                                if (is_scalar($v) && strpos(strtolower((string) $v), $search) !== false) {
+                                    $found = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!$found) {
+                            continue;
+                        }
+                    }
+
+                    $results[] = array(
+                        'id' => isset($el['id']) ? $el['id'] : '',
+                        'type' => $type,
+                        'path' => isset($el['path']) ? $el['path'] : ('container_' . $ci . '/row_' . $ri . '/column_' . $coli . '/element_unknown'),
+                        'container_index' => $ci,
+                        'row_index' => $ri,
+                        'column_index' => $coli,
+                        'attributes' => isset($el['attributes']) ? $el['attributes'] : array(),
+                    );
+
+                    if ($limit > 0 && count($results) >= $limit) {
+                        return $results;
+                    }
+                }
+            }
+        }
+    }
+
+    return $results;
+}
+
+/**
  * Helper: Re-read a structure after save and find the canonical path of an element.
  * This provides stable identity across save cycles by reading what was actually persisted.
  *
@@ -2109,12 +2643,16 @@ function mcp_avada_pro_create_page(array $params)
     }
 
     // Create an empty Avada Builder page with a single container > row > column
+    // Using default attributes for Avada backend compatibility
     $parser = new MCP_Avada_Parser();
     $structure = array(
         'containers' => array(
             array(
                 'id' => 'container_0',
-                'attributes' => array('padding_top' => '40px', 'padding_bottom' => '40px'),
+                'attributes' => mcp_avada_pro_get_default_container_attrs(array(
+                    'padding_top' => '40px',
+                    'padding_bottom' => '40px',
+                )),
                 'rows' => array(
                     array(
                         'id' => 'row_0',
@@ -2122,7 +2660,7 @@ function mcp_avada_pro_create_page(array $params)
                         'columns' => array(
                             array(
                                 'id' => 'column_0',
-                                'attributes' => array('type' => '1_1'),
+                                'attributes' => mcp_avada_pro_get_default_column_attrs(array('type' => '1_1'), true, true),
                                 'elements' => array(),
                             ),
                         ),
@@ -2145,8 +2683,9 @@ function mcp_avada_pro_create_page(array $params)
         return $post_id;
     }
 
-    // Set Avada Builder meta
-    update_post_meta($post_id, '_fusion_builder_status', 'active');
+    // Ensure required post meta is set for Avada backend (using helper function)
+    mcp_avada_pro_ensure_post_meta($post_id);
+
     update_post_meta($post_id, '_fusion_builder_version', defined('FUSION_BUILDER_VERSION') ? FUSION_BUILDER_VERSION : '3.0');
 
     // Set page template if provided
@@ -2642,6 +3181,609 @@ function mcp_avada_pro_bulk_update(array $params)
     );
 }
 
+/**
+ * Select columns on a page by scoped selector.
+ */
+function mcp_avada_pro_select_columns(array $params)
+{
+    $post_id = $params['page_id'];
+    $selector = isset($params['selector']) && is_array($params['selector']) ? $params['selector'] : array();
+    $post = get_post($post_id);
+
+    if (!$post) {
+        return new WP_Error('post_not_found', 'Post not found');
+    }
+
+    $parser = new MCP_Avada_Parser();
+    $structure = $parser->parse($post->post_content, true);
+    $results = mcp_avada_pro_select_columns_from_structure($structure, $selector);
+
+    return array(
+        'success' => true,
+        'data' => array(
+            'count' => count($results),
+            'columns' => $results,
+        ),
+    );
+}
+
+/**
+ * Bulk update column attributes by selector or explicit paths.
+ * Supports dry-run mode with before/after preview.
+ */
+function mcp_avada_pro_bulk_update_columns(array $params)
+{
+    $post_id = $params['page_id'];
+    $selector = isset($params['selector']) && is_array($params['selector']) ? $params['selector'] : array();
+    $column_paths = isset($params['column_paths']) && is_array($params['column_paths']) ? $params['column_paths'] : array();
+    $column_attributes = isset($params['column_attributes']) && is_array($params['column_attributes']) ? $params['column_attributes'] : array();
+    $dry_run = !isset($params['dry_run']) ? true : (bool) $params['dry_run'];
+
+    $post = get_post($post_id);
+    if (!$post) {
+        return new WP_Error('post_not_found', 'Post not found');
+    }
+    if (empty($column_attributes)) {
+        return new WP_Error('invalid_attributes', 'column_attributes is required and must not be empty');
+    }
+
+    $parser = new MCP_Avada_Parser();
+    $structure = $parser->parse($post->post_content, true);
+
+    $targets = array();
+    if (!empty($column_paths)) {
+        foreach ($column_paths as $column_path) {
+            $parsed = mcp_avada_pro_parse_column_path($column_path);
+            if (is_wp_error($parsed)) {
+                return $parsed;
+            }
+            $ci = $parsed['container_index'];
+            $ri = $parsed['row_index'];
+            $coli = $parsed['column_index'];
+            if (!isset($structure['containers'][$ci]['rows'][$ri]['columns'][$coli])) {
+                return new WP_Error('column_not_found', 'Column not found at path: ' . $column_path);
+            }
+            $targets[] = array(
+                'container_index' => $ci,
+                'row_index' => $ri,
+                'column_index' => $coli,
+                'path' => 'container_' . $ci . '/row_' . $ri . '/column_' . $coli,
+            );
+        }
+    } else {
+        $targets = mcp_avada_pro_select_columns_from_structure($structure, $selector);
+    }
+
+    if (empty($targets)) {
+        return new WP_Error('no_targets', 'No matching columns found');
+    }
+
+    $changes = array();
+    foreach ($targets as $t) {
+        $ci = $t['container_index'];
+        $ri = $t['row_index'];
+        $coli = $t['column_index'];
+        $column = &$structure['containers'][$ci]['rows'][$ri]['columns'][$coli];
+
+        $before = array();
+        $after = array();
+        foreach ($column_attributes as $k => $v) {
+            $key = sanitize_key($k);
+            $before[$key] = isset($column['attributes'][$key]) ? $column['attributes'][$key] : null;
+            $column['attributes'][$key] = is_scalar($v) ? (string) $v : $v;
+            $after[$key] = $column['attributes'][$key];
+        }
+
+        $changes[] = array(
+            'path' => $t['path'],
+            'before' => $before,
+            'after' => $after,
+        );
+    }
+
+    $content = $parser->generate($structure);
+    $validation = mcp_avada_pro_validate_no_data_loss($post->post_content, $content);
+    if (!$validation['valid']) {
+        return new WP_Error('avada_pro_data_loss', 'Cannot proceed: ' . $validation['error'], array('status' => 409));
+    }
+
+    if ($dry_run) {
+        return array(
+            'success' => true,
+            'data' => array(
+                'dry_run' => true,
+                'matched_columns' => count($targets),
+                'changes' => $changes,
+            ),
+        );
+    }
+
+    $result = wp_update_post(array(
+        'ID' => $post_id,
+        'post_content' => $content,
+    ), true);
+    if (is_wp_error($result)) {
+        return $result;
+    }
+
+    return array(
+        'success' => true,
+        'data' => array(
+            'dry_run' => false,
+            'updated_columns' => count($targets),
+            'changes' => $changes,
+        ),
+    );
+}
+
+/**
+ * Clone source column attributes to target columns.
+ * Allows preserve list to keep target-specific fields.
+ */
+function mcp_avada_pro_clone_column_style(array $params)
+{
+    $post_id = $params['page_id'];
+    $source_path = $params['source_column_path'];
+    $target_paths = isset($params['target_column_paths']) && is_array($params['target_column_paths']) ? $params['target_column_paths'] : array();
+    $selector = isset($params['selector']) && is_array($params['selector']) ? $params['selector'] : array();
+    $dry_run = !isset($params['dry_run']) ? true : (bool) $params['dry_run'];
+    $preserve = isset($params['preserve_attributes']) && is_array($params['preserve_attributes']) ? $params['preserve_attributes'] : array(
+        'type',
+        'type_medium',
+        'type_small',
+        'first',
+        'last',
+        'class',
+        'id',
+    );
+
+    $post = get_post($post_id);
+    if (!$post) {
+        return new WP_Error('post_not_found', 'Post not found');
+    }
+
+    $parser = new MCP_Avada_Parser();
+    $structure = $parser->parse($post->post_content, true);
+
+    $source = mcp_avada_pro_parse_column_path($source_path);
+    if (is_wp_error($source)) {
+        return $source;
+    }
+
+    $sci = $source['container_index'];
+    $sri = $source['row_index'];
+    $scoli = $source['column_index'];
+    if (!isset($structure['containers'][$sci]['rows'][$sri]['columns'][$scoli])) {
+        return new WP_Error('source_not_found', 'Source column not found: ' . $source_path);
+    }
+    $source_attrs = isset($structure['containers'][$sci]['rows'][$sri]['columns'][$scoli]['attributes'])
+        ? $structure['containers'][$sci]['rows'][$sri]['columns'][$scoli]['attributes']
+        : array();
+
+    $targets = array();
+    if (!empty($target_paths)) {
+        foreach ($target_paths as $column_path) {
+            $parsed = mcp_avada_pro_parse_column_path($column_path);
+            if (is_wp_error($parsed)) {
+                return $parsed;
+            }
+            $ci = $parsed['container_index'];
+            $ri = $parsed['row_index'];
+            $coli = $parsed['column_index'];
+            if (!isset($structure['containers'][$ci]['rows'][$ri]['columns'][$coli])) {
+                return new WP_Error('column_not_found', 'Column not found at path: ' . $column_path);
+            }
+            $targets[] = array(
+                'container_index' => $ci,
+                'row_index' => $ri,
+                'column_index' => $coli,
+                'path' => 'container_' . $ci . '/row_' . $ri . '/column_' . $coli,
+            );
+        }
+    } else {
+        $targets = mcp_avada_pro_select_columns_from_structure($structure, $selector);
+    }
+
+    if (empty($targets)) {
+        return new WP_Error('no_targets', 'No target columns found');
+    }
+
+    $source_canonical_path = 'container_' . $sci . '/row_' . $sri . '/column_' . $scoli;
+    $changes = array();
+    foreach ($targets as $t) {
+        if ($t['path'] === $source_canonical_path) {
+            continue;
+        }
+
+        $ci = $t['container_index'];
+        $ri = $t['row_index'];
+        $coli = $t['column_index'];
+        $column = &$structure['containers'][$ci]['rows'][$ri]['columns'][$coli];
+        $target_attrs = isset($column['attributes']) ? $column['attributes'] : array();
+        $merged = $source_attrs;
+
+        foreach ($preserve as $key) {
+            $key = sanitize_key($key);
+            if (array_key_exists($key, $target_attrs)) {
+                $merged[$key] = $target_attrs[$key];
+            }
+        }
+
+        $column['attributes'] = $merged;
+        $changes[] = array(
+            'path' => $t['path'],
+            'preserved_keys' => $preserve,
+        );
+    }
+
+    $content = $parser->generate($structure);
+    $validation = mcp_avada_pro_validate_no_data_loss($post->post_content, $content);
+    if (!$validation['valid']) {
+        return new WP_Error('avada_pro_data_loss', 'Cannot proceed: ' . $validation['error'], array('status' => 409));
+    }
+
+    if ($dry_run) {
+        return array(
+            'success' => true,
+            'data' => array(
+                'dry_run' => true,
+                'source' => $source_canonical_path,
+                'updated_columns' => count($changes),
+                'changes' => $changes,
+            ),
+        );
+    }
+
+    $result = wp_update_post(array(
+        'ID' => $post_id,
+        'post_content' => $content,
+    ), true);
+    if (is_wp_error($result)) {
+        return $result;
+    }
+
+    return array(
+        'success' => true,
+        'data' => array(
+            'dry_run' => false,
+            'source' => $source_canonical_path,
+            'updated_columns' => count($changes),
+            'changes' => $changes,
+        ),
+    );
+}
+
+/**
+ * Clone source element attributes to target elements.
+ * Allows preserve list to keep target-specific content identity keys.
+ */
+function mcp_avada_pro_clone_element_style(array $params)
+{
+    $post_id = $params['page_id'];
+    $source_path = $params['source_element_path'];
+    $target_paths = isset($params['target_element_paths']) && is_array($params['target_element_paths']) ? $params['target_element_paths'] : array();
+    $selector = isset($params['selector']) && is_array($params['selector']) ? $params['selector'] : array();
+    $dry_run = !isset($params['dry_run']) ? true : (bool) $params['dry_run'];
+    $preserve = isset($params['preserve_attributes']) && is_array($params['preserve_attributes']) ? $params['preserve_attributes'] : array(
+        'image',
+        'image_id',
+        'image_title',
+        'image_caption',
+        'alt',
+        'link',
+        'linktarget',
+        'dynamic_params',
+    );
+
+    $post = get_post($post_id);
+    if (!$post) {
+        return new WP_Error('post_not_found', 'Post not found');
+    }
+
+    $parser = new MCP_Avada_Parser();
+    $structure = $parser->parse($post->post_content, true);
+
+    $source = mcp_avada_pro_parse_element_path($source_path);
+    if (is_wp_error($source)) {
+        return $source;
+    }
+
+    $sci = $source['container_index'];
+    $sri = $source['row_index'];
+    $scoli = $source['column_index'];
+    $seid = $source['element_id'];
+
+    if (!isset($structure['containers'][$sci]['rows'][$sri]['columns'][$scoli])) {
+        return new WP_Error('source_not_found', 'Source element column not found: ' . $source_path);
+    }
+
+    $source_el = null;
+    foreach (($structure['containers'][$sci]['rows'][$sri]['columns'][$scoli]['elements'] ?? array()) as $el) {
+        if (($el['id'] ?? '') === $seid) {
+            $source_el = $el;
+            break;
+        }
+    }
+    if (!$source_el) {
+        return new WP_Error('source_not_found', 'Source element not found: ' . $source_path);
+    }
+
+    $source_attrs = isset($source_el['attributes']) ? $source_el['attributes'] : array();
+    $source_type = isset($source_el['type']) ? $source_el['type'] : '';
+
+    $targets = array();
+    if (!empty($target_paths)) {
+        foreach ($target_paths as $element_path) {
+            $parsed = mcp_avada_pro_parse_element_path($element_path);
+            if (is_wp_error($parsed)) {
+                return $parsed;
+            }
+            $ci = $parsed['container_index'];
+            $ri = $parsed['row_index'];
+            $coli = $parsed['column_index'];
+            $eid = $parsed['element_id'];
+            if (!isset($structure['containers'][$ci]['rows'][$ri]['columns'][$coli])) {
+                return new WP_Error('target_not_found', 'Target element column not found: ' . $element_path);
+            }
+            $found = false;
+            foreach (($structure['containers'][$ci]['rows'][$ri]['columns'][$coli]['elements'] ?? array()) as $el) {
+                if (($el['id'] ?? '') === $eid) {
+                    $found = true;
+                    break;
+                }
+            }
+            if (!$found) {
+                return new WP_Error('target_not_found', 'Target element not found: ' . $element_path);
+            }
+
+            $targets[] = array(
+                'container_index' => $ci,
+                'row_index' => $ri,
+                'column_index' => $coli,
+                'element_id' => $eid,
+                'path' => 'container_' . $ci . '/row_' . $ri . '/column_' . $coli . '/' . $eid,
+            );
+        }
+    } else {
+        if (!isset($selector['element_type']) && !empty($source_type)) {
+            $selector['element_type'] = $source_type;
+        }
+        $targets = mcp_avada_pro_select_elements_from_structure($structure, $selector);
+    }
+
+    if (empty($targets)) {
+        return new WP_Error('no_targets', 'No target elements found');
+    }
+
+    $source_canonical_path = 'container_' . $sci . '/row_' . $sri . '/column_' . $scoli . '/' . $seid;
+    $changes = array();
+
+    foreach ($targets as $t) {
+        $target_path = isset($t['path']) ? $t['path'] : '';
+        if ($target_path === $source_canonical_path) {
+            continue;
+        }
+
+        $ci = $t['container_index'];
+        $ri = $t['row_index'];
+        $coli = $t['column_index'];
+        $eid = isset($t['element_id']) ? $t['element_id'] : ($t['id'] ?? '');
+
+        if (empty($eid) || !isset($structure['containers'][$ci]['rows'][$ri]['columns'][$coli]['elements'])) {
+            continue;
+        }
+
+        foreach ($structure['containers'][$ci]['rows'][$ri]['columns'][$coli]['elements'] as &$element) {
+            if (($element['id'] ?? '') !== $eid) {
+                continue;
+            }
+
+            $target_attrs = isset($element['attributes']) ? $element['attributes'] : array();
+            $merged = $source_attrs;
+
+            foreach ($preserve as $key) {
+                $key = sanitize_key($key);
+                if (array_key_exists($key, $target_attrs)) {
+                    $merged[$key] = $target_attrs[$key];
+                }
+            }
+
+            $element['attributes'] = $merged;
+            $changes[] = array(
+                'path' => $target_path,
+                'element_type' => isset($element['type']) ? $element['type'] : '',
+                'preserved_keys' => $preserve,
+            );
+            break;
+        }
+        unset($element);
+    }
+
+    if (empty($changes)) {
+        return new WP_Error('no_effective_targets', 'No effective target elements to update after filtering source/self');
+    }
+
+    $content = $parser->generate($structure);
+    $validation = mcp_avada_pro_validate_no_data_loss($post->post_content, $content);
+    if (!$validation['valid']) {
+        return new WP_Error('avada_pro_data_loss', 'Cannot proceed: ' . $validation['error'], array('status' => 409));
+    }
+
+    if ($dry_run) {
+        return array(
+            'success' => true,
+            'data' => array(
+                'dry_run' => true,
+                'source' => $source_canonical_path,
+                'source_type' => $source_type,
+                'updated_elements' => count($changes),
+                'changes' => $changes,
+            ),
+        );
+    }
+
+    $result = wp_update_post(array(
+        'ID' => $post_id,
+        'post_content' => $content,
+    ), true);
+    if (is_wp_error($result)) {
+        return $result;
+    }
+
+    return array(
+        'success' => true,
+        'data' => array(
+            'dry_run' => false,
+            'source' => $source_canonical_path,
+            'source_type' => $source_type,
+            'updated_elements' => count($changes),
+            'changes' => $changes,
+        ),
+    );
+}
+
+/**
+ * Enforce responsive width policy on selected columns.
+ */
+function mcp_avada_pro_enforce_responsive_policy(array $params)
+{
+    $post_id = $params['page_id'];
+    $selector = isset($params['selector']) && is_array($params['selector']) ? $params['selector'] : array();
+    $column_paths = isset($params['column_paths']) && is_array($params['column_paths']) ? $params['column_paths'] : array();
+    $desktop = isset($params['desktop']) ? sanitize_text_field($params['desktop']) : 'keep';
+    $tablet = isset($params['tablet']) ? sanitize_text_field($params['tablet']) : null;
+    $mobile = isset($params['mobile']) ? sanitize_text_field($params['mobile']) : null;
+    $dry_run = !isset($params['dry_run']) ? true : (bool) $params['dry_run'];
+
+    $post = get_post($post_id);
+    if (!$post) {
+        return new WP_Error('post_not_found', 'Post not found');
+    }
+
+    $valid_widths = array('keep', '1_1', '1_2', '1_3', '2_3', '1_4', '3_4', '1_5', '2_5', '3_5', '4_5', '1_6', '5_6');
+    if (!in_array($desktop, $valid_widths, true)) {
+        return new WP_Error('invalid_desktop', 'Invalid desktop policy value');
+    }
+    if ($tablet !== null && !in_array($tablet, $valid_widths, true)) {
+        return new WP_Error('invalid_tablet', 'Invalid tablet policy value');
+    }
+    if ($mobile !== null && !in_array($mobile, $valid_widths, true)) {
+        return new WP_Error('invalid_mobile', 'Invalid mobile policy value');
+    }
+
+    $parser = new MCP_Avada_Parser();
+    $structure = $parser->parse($post->post_content, true);
+
+    $targets = array();
+    if (!empty($column_paths)) {
+        foreach ($column_paths as $column_path) {
+            $parsed = mcp_avada_pro_parse_column_path($column_path);
+            if (is_wp_error($parsed)) {
+                return $parsed;
+            }
+            $ci = $parsed['container_index'];
+            $ri = $parsed['row_index'];
+            $coli = $parsed['column_index'];
+            if (!isset($structure['containers'][$ci]['rows'][$ri]['columns'][$coli])) {
+                return new WP_Error('column_not_found', 'Column not found at path: ' . $column_path);
+            }
+            $targets[] = array(
+                'container_index' => $ci,
+                'row_index' => $ri,
+                'column_index' => $coli,
+                'path' => 'container_' . $ci . '/row_' . $ri . '/column_' . $coli,
+            );
+        }
+    } else {
+        $targets = mcp_avada_pro_select_columns_from_structure($structure, $selector);
+    }
+
+    if (empty($targets)) {
+        return new WP_Error('no_targets', 'No matching columns found');
+    }
+
+    $changes = array();
+    foreach ($targets as $t) {
+        $ci = $t['container_index'];
+        $ri = $t['row_index'];
+        $coli = $t['column_index'];
+        $column = &$structure['containers'][$ci]['rows'][$ri]['columns'][$coli];
+        $attrs = isset($column['attributes']) ? $column['attributes'] : array();
+
+        $before = array(
+            'type' => isset($attrs['type']) ? $attrs['type'] : null,
+            'type_medium' => isset($attrs['type_medium']) ? $attrs['type_medium'] : null,
+            'type_small' => isset($attrs['type_small']) ? $attrs['type_small'] : null,
+        );
+
+        if ($desktop !== 'keep') {
+            $column['attributes']['type'] = $desktop;
+        }
+        if ($tablet !== null && $tablet !== 'keep') {
+            $column['attributes']['type_medium'] = $tablet;
+        }
+        if ($mobile !== null && $mobile !== 'keep') {
+            $column['attributes']['type_small'] = $mobile;
+        }
+
+        $after = array(
+            'type' => isset($column['attributes']['type']) ? $column['attributes']['type'] : null,
+            'type_medium' => isset($column['attributes']['type_medium']) ? $column['attributes']['type_medium'] : null,
+            'type_small' => isset($column['attributes']['type_small']) ? $column['attributes']['type_small'] : null,
+        );
+
+        $changes[] = array(
+            'path' => $t['path'],
+            'before' => $before,
+            'after' => $after,
+        );
+    }
+
+    $content = $parser->generate($structure);
+    $validation = mcp_avada_pro_validate_no_data_loss($post->post_content, $content);
+    if (!$validation['valid']) {
+        return new WP_Error('avada_pro_data_loss', 'Cannot proceed: ' . $validation['error'], array('status' => 409));
+    }
+
+    if ($dry_run) {
+        return array(
+            'success' => true,
+            'data' => array(
+                'dry_run' => true,
+                'matched_columns' => count($targets),
+                'policy' => array(
+                    'desktop' => $desktop,
+                    'tablet' => $tablet,
+                    'mobile' => $mobile,
+                ),
+                'changes' => $changes,
+            ),
+        );
+    }
+
+    $result = wp_update_post(array(
+        'ID' => $post_id,
+        'post_content' => $content,
+    ), true);
+    if (is_wp_error($result)) {
+        return $result;
+    }
+
+    return array(
+        'success' => true,
+        'data' => array(
+            'dry_run' => false,
+            'updated_columns' => count($targets),
+            'policy' => array(
+                'desktop' => $desktop,
+                'tablet' => $tablet,
+                'mobile' => $mobile,
+            ),
+            'changes' => $changes,
+        ),
+    );
+}
+
 // =========================================================================
 // PRIORITY 2: SCHEMA INTROSPECTION ABILITIES (v3.1.0)
 // =========================================================================
@@ -3117,11 +4259,27 @@ function mcp_avada_pro_validate_page_structure(array $params)
     }
 
     // Self-closing tags (no content) are expected to have no closing tags
-    $self_closing_tags = array('fusion_image', 'fusion_separator', 'fusion_fontawesome', 'fusion_gallery',
-        'fusion_blog', 'fusion_portfolio', 'fusion_social_links', 'fusion_slider', 'fusion_post_slider',
-        'fusion_rev_slider', 'fusion_layerslider', 'fusion_modal_text_link', 'fusion_pricing_button',
-        'fusion_viewport', 'fusion_code_block', 'fusion_post_grid', 'fusion_portfolio_masonry',
-        'fusion_google_fonts', 'fusion_fusion_slider');
+    $self_closing_tags = array(
+        'fusion_image',
+        'fusion_separator',
+        'fusion_fontawesome',
+        'fusion_gallery',
+        'fusion_blog',
+        'fusion_portfolio',
+        'fusion_social_links',
+        'fusion_slider',
+        'fusion_post_slider',
+        'fusion_rev_slider',
+        'fusion_layerslider',
+        'fusion_modal_text_link',
+        'fusion_pricing_button',
+        'fusion_viewport',
+        'fusion_code_block',
+        'fusion_post_grid',
+        'fusion_portfolio_masonry',
+        'fusion_google_fonts',
+        'fusion_fusion_slider'
+    );
 
     foreach ($open_counts as $tag => $ocount) {
         if (in_array($tag, $self_closing_tags, true)) {
@@ -3186,18 +4344,23 @@ function mcp_avada_pro_validate_page_structure(array $params)
         }
     }
 
-    // 5. Check builder_enabled meta
-    $builder_status = get_post_meta($post_id, '_fusion_builder_status', true);
+    // 5. Check builder_enabled meta - check both _fusion_builder_status and fusion_builder_status
+    $builder_status = get_post_meta($post_id, 'fusion_builder_status', true);
+    if (empty($builder_status)) {
+        $builder_status = get_post_meta($post_id, '_fusion_builder_status', true);
+    }
     $has_containers = substr_count($content, '[fusion_builder_container');
     if ($builder_status !== 'active' && $has_containers > 0) {
         $warnings[] = array(
             'type' => 'builder_status_mismatch',
-            'message' => 'Page has ' . $has_containers . ' containers but _fusion_builder_status is not "active"',
+            'message' => 'Page has ' . $has_containers . ' containers but fusion_builder_status is not "active"',
         );
     }
 
     // Score calculation
-    $error_count = count(array_filter($issues, function ($i) { return ($i['severity'] ?? '') === 'error'; }));
+    $error_count = count(array_filter($issues, function ($i) {
+        return ($i['severity'] ?? '') === 'error';
+    }));
     $health_score = max(0, 10 - ($error_count * 2) - count($warnings));
 
     return array(
