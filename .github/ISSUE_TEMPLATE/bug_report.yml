@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a reproducible bug
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please include reproducible details.
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+      placeholder: "e.g. 3.3.1"
+    validations:
+      required: true
+  - type: input
+    id: wp_version
+    attributes:
+      label: WordPress version
+      placeholder: "e.g. 6.9.1"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. ... 2. ... 3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / errors
+      render: shell

@@ -6,6 +6,14 @@ Advanced MCP integration for Avada Fusion Builder with full shortcode parsing an
 
 ---
 
+## Status & Affiliation
+
+- This is an **independent community project**.
+- It is **not affiliated with, endorsed by, or maintained by ThemeFusion/Avada**.
+- All product names and trademarks belong to their respective owners.
+
+---
+
 ## Overview
 
 MCP Avada Builder Pro provides comprehensive abilities for controlling Avada Fusion Builder programmatically via the WordPress Abilities API and MCP protocol. Features:
@@ -235,6 +243,22 @@ Configure your MCP client (e.g. @automattic/mcp-wordpress-remote) with your Word
 
 ---
 
+## Contributor Quick Start
+
+1. Fork the repository.
+2. Create a branch from `main`.
+3. Make focused changes.
+4. Run PHP lint:
+   - `php -l mcp-avada-builder-pro.php`
+   - `php -l includes/class-avada-parser.php`
+   - `php -l includes/class-avada-elements.php`
+5. Open a PR using the template.
+
+See:
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [SECURITY.md](SECURITY.md)
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+
 ## Structured Editing Patterns (Examples)
 
 ### 1) Source-of-truth card replication (columns)
@@ -273,6 +297,7 @@ Configure your MCP client (e.g. @automattic/mcp-wordpress-remote) with your Word
 - Added `avada-pro/enforce-responsive-policy` for bulk desktop/tablet/mobile width policy enforcement.
 - Added selector helper for structured element targeting in style-clone workflows.
 - Added dry-run-first workflow examples for bulk styling and responsive normalization.
+- Added OSS baseline docs and GitHub templates (`LICENSE`, `CONTRIBUTING`, `SECURITY`, issue/PR templates, CI PHP lint workflow).
 
 ### 3.3.0
 - Added `avada-pro/select-columns` for scoped column querying by container label/index, row/index, attrs, and element presence.
@@ -311,3 +336,10 @@ Configure your MCP client (e.g. @automattic/mcp-wordpress-remote) with your Word
 
 **arnelG**
 - GitHub: @wikiwyrhead
+
+---
+
+## License
+
+GNU General Public License v2.0 or later (GPL-2.0-or-later).  
+See [LICENSE](LICENSE).
