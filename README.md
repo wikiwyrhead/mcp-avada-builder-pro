@@ -2,7 +2,7 @@
 
 Advanced MCP integration for Avada Fusion Builder with full shortcode parsing and element management.
 
-## Version: 3.3.1
+## Version: 3.3.3
 
 ---
 
@@ -291,6 +291,11 @@ See:
 ---
 
 ## Changelog
+
+### 3.3.3
+- Fixed parser behavior so `fusion_image` shortcodes inside `fusion_images` are not parsed as standalone elements.
+- Prevented duplicate large image blocks from being reintroduced below image carousels after structured page updates.
+- Hardened carousel edit workflows for repeatable builder-safe mutations.
 
 ### 3.3.1
 - Added `avada-pro/clone-element-style` for source-of-truth element attribute cloning with preserve-key controls.

@@ -3,7 +3,7 @@
 /**
  * Plugin Name: MCP Avada Builder Pro
  * Description: Advanced MCP integration for Avada Fusion Builder with full shortcode parsing and element management
- * Version: 3.3.1
+ * Version: 3.3.3
  * Author: arnelG
  * Author URI: https://github.com/wikiwyrhead
  * Plugin URI: https://github.com/wikiwyrhead/mcp-avada-builder
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('MCP_AVADA_VERSION', '3.3.1');
+define('MCP_AVADA_VERSION', '3.3.3');
 
 /**
  * Get default Avada container attributes for backend compatibility.
