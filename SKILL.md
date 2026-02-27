@@ -262,6 +262,49 @@ After write operations, a `canonical_path` is returned reflecting the actual per
 
 **Total: 56 element types available**
 
+## Page Template Structure
+
+For proper Avada Builder backend compatibility, pages must have:
+
+1. **Container attributes** - Always use `type="flex"` and include:
+   - `hundred_percent="no"`
+   - `hundred_percent_height="no"`
+   - `align_content="stretch"`
+   - `flex_align_items="flex-start"`
+   - `hide_on_mobile="small-visibility,medium-visibility,large-visibility"`
+   - `status="published"`
+
+2. **Column attributes** - Include `layout` attribute and position flags:
+   - `type="1_1"` (full), `type="1_2"` (half), `type="1_3"` (third)
+   - `layout="1_2"` (required)
+   - `first="true"` / `first="false"`
+   - `last="true"` / `last="false"`
+
+3. **Required post meta** - Must be set for backend to work:
+   - `_fusion` - Page settings (serialized array)
+   - `fusion_builder_status` = "active" (NOT `_fusion_builder_status`)
+
+**Reference:** See [AVADA_TEMPLATE_REFERENCE.md](./AVADA_TEMPLATE_REFERENCE.md) for complete working page example.
+
+## Known Limitations
+
+### Shortcode Attribute Generation
+
+The MCP Avada Builder abilities generate shortcodes with minimal default attributes. For full Avada Builder backend compatibility, pages must include:
+
+1. **Container attributes** - Must include `type="flex"` and other flexbox attributes
+2. **Column attributes** - Must include `layout` attribute and `first`/`last` position flags
+3. **Required post meta** - Must have proper `_fusion` and `fusion_builder_status` meta
+
+**Version 3.2.1 Update:** The plugin now automatically:
+- Adds default container attributes (`type="flex"`, `hundred_percent="no"`, etc.)
+- Adds default column attributes (`layout`, `first`, `last`)
+- Sets required post meta (`fusion_builder_status`, `_fusion`)
+
+If using an older version, either:
+- Use `content/update-page` with pre-formatted shortcode content
+- Manually add the required attributes and post meta
+
 ## Execution Contract (Mandatory)
 
 Use this deterministic flow for every write task:
@@ -325,6 +368,39 @@ Use for diagnostics only.
 2. Produce severity-ranked findings with concrete selectors/paths.
 3. Do not call any write ability in this mode.
 
+### 5) Responsive Drift Debugger (Transferable)
+Use when builder attributes look correct but frontend spacing/width still renders wrong.
+
+1. Read page source of truth via `GET /wp-json/wp/v2/pages/{id}?context=edit`.
+2. Fetch rendered frontend HTML for the same page URL.
+3. Compare target section card attrs (`type`, `type_medium`, `type_small`, spacing attrs) against rendered CSS vars (`--awb-width-*`, `--awb-spacing-*`).
+4. Normalize structure first (column attrs), then keep page-scoped CSS minimal and only for deterministic overrides.
+5. Re-fetch frontend and verify rendered var groups are uniform for the target class.
+
+Use this when troubleshooting:
+- mixed card widths (e.g., `1_4` + `1_3`) in one grid
+- large unexpected gutters despite matching shortcode attrs
+- repeated edits causing malformed or duplicate style blocks
+
+## Utility Script: Rendered Variable Verification
+
+Use `tools/verify_avada_rendered_vars.ps1` for quick frontend checks.
+
+Examples:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/verify_avada_rendered_vars.ps1 `
+  -Url "https://example.com/target-page/" `
+  -ClassName "all-services-card"
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/verify_avada_rendered_vars.ps1 `
+  -Url "https://example.com/target-page/" `
+  -ClassName "service-card" `
+  -OutJson "tools/rendered_vars_report.json"
+```
+
 ## Corruption Prevention Safeguards
 
 - Before large mutations, keep a backup snapshot of current page content/structure.
@@ -379,3 +455,16 @@ POST /wp-json/wp-abilities/v1/abilities/avada-pro/{ability}/run    (write ops + 
 ```
 
 POST body format: `{"input": {"param_name": "value"}}`
+
+## Integration Points
+
+This skill integrates with:
+- **Abilities API** (`wp_register_ability()`) - for registering the 23 MCP abilities
+- **MCP Adapter** - for exposing abilities via MCP protocol
+- **Avada Theme/Fusion Builder** - for element types and rendering
+- **WordPress REST API** - for `/wp-json/wp-abilities/v1/*` endpoints
+
+## Related Skills
+
+- [wp-abilities-api](../wp-abilities-api/SKILL.md) - For understanding how abilities are registered and exposed
+- [wp-plugin-development](../wp-plugin-development/SKILL.md) - For creating similar ability plugins
