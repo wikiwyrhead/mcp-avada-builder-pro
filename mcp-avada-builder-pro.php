@@ -18,6 +18,14 @@ if (!defined('ABSPATH')) {
 
 define('MCP_AVADA_VERSION', '3.3.3');
 
+require_once plugin_dir_path(__FILE__) . 'inc/skills/class-mcp-avada-pro-skills-registry.php';
+
+add_action('plugins_loaded', function (): void {
+    if (class_exists('MCP_Avada_Pro_Skills_Registry')) {
+        MCP_Avada_Pro_Skills_Registry::bootstrap();
+    }
+}, 20);
+
 /**
  * Get default Avada container attributes for backend compatibility.
  * These attributes are required for the Avada Builder backend to work properly.
