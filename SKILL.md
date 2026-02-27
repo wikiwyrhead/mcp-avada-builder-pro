@@ -262,6 +262,76 @@ After write operations, a `canonical_path` is returned reflecting the actual per
 
 **Total: 56 element types available**
 
+## Execution Contract (Mandatory)
+
+Use this deterministic flow for every write task:
+
+1. **MCP adapter preflight**
+   - Run `avada-pro/get-info`.
+   - Confirm plugin/theme/element registry is reachable.
+2. **Page integrity preflight**
+   - Run `avada-pro/validate-page-structure`.
+   - If health issues are reported, stop and run repair flow (`dry_run=true`) before edits.
+3. **Structured read phase**
+   - Run `avada-pro/get-page-structure` with `include_content=true`.
+   - Identify exact target paths (`container_X/row_Y/column_Z/...`) and source-of-truth path when applicable.
+4. **Structured mutation only**
+   - Use `update-element` / `bulk-update` / `replace-content` with parsed structure.
+   - For repeated card styling, copy only approved attributes from source-of-truth, never text/links unless explicitly requested.
+5. **Post-edit verification**
+   - Re-run `validate-page-structure`.
+   - Re-run `get-page-structure` and verify path counts/target attributes.
+   - Verify frontend at desktop/tablet/mobile for overflow, spacing, and contrast regressions.
+
+## Strict Safety Rules
+
+- Never edit `post_content` directly with ad-hoc string replacements.
+- Never run direct DB mutations (`UPDATE wp_posts ...`) for builder changes.
+- Never bypass MCP/Abilities write paths for Avada page edits.
+- Never perform breakpoint-blind changes; set desktop/tablet/mobile values explicitly.
+- Prefer `bulk-update` for multi-card synchronization to reduce partial-edit risk.
+- Use `replace-content` only with parser-generated structure and only after successful validation.
+
+## Reusable Playbooks
+
+### 1) Bulk Card Standardization (Source-of-Truth)
+Use when one card design must be replicated to sibling cards.
+
+1. Locate section and card paths using `find-element` / `list-all-elements`.
+2. Capture source card attributes (container/column + child element attrs).
+3. Build a target path list excluding source card.
+4. Apply one `bulk-update` transaction for all target cards.
+5. Verify structure + responsive render.
+
+### 2) Shadow Sync Across Cards
+Use for consistent box shadow (`2,2` etc.) across a card grid.
+
+1. Identify all card wrappers/columns in section.
+2. Update only shadow attributes (`box_shadow`, position offsets, blur/spread when required).
+3. Do not touch content or layout attributes.
+4. Verify hover state remains unchanged when hover is specified as none.
+
+### 3) Responsive Spacing Adjustment (Mobile-Only)
+Use when title/image/button spacing fails only on mobile.
+
+1. Update `*_small` attributes first (`margin_top_small`, `padding_*_small`, `alignment_small`).
+2. Leave desktop/tablet values untouched unless explicitly requested.
+3. Validate mobile stacking and text readability after change.
+
+### 4) Design Audit Mode (No-Edit)
+Use for diagnostics only.
+
+1. Gather computed style and layout data (contrast, overflow, spacing rhythm, card consistency).
+2. Produce severity-ranked findings with concrete selectors/paths.
+3. Do not call any write ability in this mode.
+
+## Corruption Prevention Safeguards
+
+- Before large mutations, keep a backup snapshot of current page content/structure.
+- For `replace-content`, reject empty or schema-invalid structures.
+- After write, ensure element counts did not unexpectedly drop in target section.
+- If canonical paths change after write, continue operations using returned canonical paths only.
+
 ## Example Workflows
 
 ### Modify existing content

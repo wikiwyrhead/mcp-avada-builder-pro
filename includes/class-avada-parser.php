@@ -357,6 +357,17 @@ class MCP_Avada_Parser
     {
         $elements = array();
         $matched_ranges = array(); // Track byte ranges that were matched by known patterns
+        $fusion_images_ranges = array(); // Track fusion_images block ranges to avoid nested fusion_image duplication
+
+        // Pre-scan fusion_images blocks so nested [fusion_image] items are not parsed as standalone elements.
+        if (isset($this->element_patterns['fusion_images'])) {
+            preg_match_all($this->element_patterns['fusion_images'], $content, $fusion_images_matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+            foreach ($fusion_images_matches as $fmatch) {
+                $foffset = $fmatch[0][1];
+                $flength = strlen($fmatch[0][0]);
+                $fusion_images_ranges[] = array($foffset, $foffset + $flength);
+            }
+        }
 
         // PASS 1: Match all KNOWN element types
         foreach ($this->element_patterns as $type => $pattern) {
@@ -370,6 +381,21 @@ class MCP_Avada_Parser
             foreach ($matches as $match) {
                 $offset = $match[0][1];
                 $length = strlen($match[0][0]);
+                $end = $offset + $length;
+
+                // Guard: do not parse [fusion_image] shortcodes that belong to a [fusion_images] block.
+                if ('fusion_image' === $type) {
+                    $inside_fusion_images = false;
+                    foreach ($fusion_images_ranges as $frange) {
+                        if ($offset >= $frange[0] && $end <= $frange[1]) {
+                            $inside_fusion_images = true;
+                            break;
+                        }
+                    }
+                    if ($inside_fusion_images) {
+                        continue;
+                    }
+                }
 
                 $elements[] = array(
                     'type' => $type,
